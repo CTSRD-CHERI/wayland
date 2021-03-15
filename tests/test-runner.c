@@ -36,10 +36,15 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <sys/ptrace.h>
+#ifdef __FreeBSD__
+#include <sys/procctl.h>
+#else
 #include <sys/prctl.h>
 #ifndef PR_SET_PTRACER
 # define PR_SET_PTRACER 0x59616d61
+#endif
 #endif
 
 #include "test-runner.h"
@@ -229,8 +234,17 @@ stderr_reset_color(void)
 static int
 is_debugger_attached(void)
 {
-	int status;
 	int rc;
+	int status;
+#ifdef __FreeBSD__
+	rc = procctl(P_PID, getpid(), PROC_TRACE_STATUS, &status);
+	if (rc == -1) {
+		perror("procctl");
+		return 0;
+	}
+	/* -1=tracing disabled, 0=no debugger attached, >0=pid of debugger. */
+	return status > 0;
+#else
 	pid_t pid;
 	int pipefd[2];
 
@@ -286,6 +300,7 @@ is_debugger_attached(void)
 	}
 
 	return rc;
+#endif
 }
 
 int main(int argc, char *argv[])
