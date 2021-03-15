@@ -42,6 +42,9 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#if defined(__FreeBSD__)
+#include <sys/ucred.h>
+#endif
 
 #include "wayland-util.h"
 #include "wayland-private.h"
@@ -78,7 +81,9 @@ struct wl_client {
 	struct wl_list link;
 	struct wl_map objects;
 	struct wl_priv_signal destroy_signal;
-	struct ucred ucred;
+	pid_t pid;
+	uid_t uid;
+	gid_t gid;
 	int error;
 	struct wl_priv_signal resource_created_signal;
 };
@@ -314,7 +319,7 @@ wl_resource_post_error(struct wl_resource *resource,
 static void
 destroy_client_with_error(struct wl_client *client, const char *reason)
 {
-	wl_log("%s (pid %u)\n", reason, client->ucred.pid);
+	wl_log("%s (pid %u)\n", reason, client->pid);
 	wl_client_destroy(client);
 }
 
@@ -514,6 +519,11 @@ wl_client_create(struct wl_display *display, int fd)
 {
 	struct wl_client *client;
 	socklen_t len;
+#if defined(__FreeBSD__)
+	struct xucred ucred;
+#else
+	struct ucred ucred;
+#endif
 
 	client = zalloc(sizeof *client);
 	if (client == NULL)
@@ -528,10 +538,28 @@ wl_client_create(struct wl_display *display, int fd)
 	if (!client->source)
 		goto err_client;
 
-	len = sizeof client->ucred;
-	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED,
-		       &client->ucred, &len) < 0)
+	len = sizeof(ucred);
+#if defined(SO_PEERCRED)
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0)
 		goto err_source;
+	client->uid = ucred.uid;
+	client->gid = ucred.gid;
+	client->uid = ucred.pid;
+#elif defined(__FreeBSD__)
+	if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERCRED, &ucred, &len) < 0 ||
+	    ucred.cr_version != XUCRED_VERSION)
+		goto err_source;
+	client->uid = ucred.cr_uid;
+	client->gid = ucred.cr_gid;
+#if __FreeBSD_version >= 1300030
+	/* Since https://cgit.freebsd.org/src/commit/?id=c5afec6e895a */
+	client->pid = ucred.cr_pid;
+#else
+	client->pid = 0;
+#endif
+#else
+#error "Don't know how to read ucred on this platform"
+#endif
 
 	client->connection = wl_connection_create(fd);
 	if (client->connection == NULL)
@@ -586,11 +614,11 @@ wl_client_get_credentials(struct wl_client *client,
 			  pid_t *pid, uid_t *uid, gid_t *gid)
 {
 	if (pid)
-		*pid = client->ucred.pid;
+		*pid = client->pid;
 	if (uid)
-		*uid = client->ucred.uid;
+		*uid = client->uid;
 	if (gid)
-		*gid = client->ucred.gid;
+		*gid = client->gid;
 }
 
 /** Get the file descriptor for the client
