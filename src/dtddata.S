@@ -46,5 +46,10 @@
 	.int (\name\()_end - \name\()_begin)
 .endm
 
+#if defined(__ELF__)
 .section .rodata
-binfile DTD_DATA src/wayland.dtd.embed
+binfile DTD_DATA, src/wayland.dtd.embed
+#elif defined(__APPLE__)
+/* We need an extra _ due to the macOS C symbol name mangling. */
+binfile _DTD_DATA, src/wayland.dtd.embed
+#endif
