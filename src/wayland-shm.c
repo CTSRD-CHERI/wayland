@@ -63,6 +63,12 @@ struct wl_shm_pool {
 	char *data;
 	int32_t size;
 	int32_t new_size;
+#ifndef HAVE_MREMAP
+	/* The following three fields are needed for mremap() emulation. */
+	int mmap_fd;
+	int mmap_flags;
+	int mmap_prot;
+#endif
 	bool sigbus_is_impossible;
 };
 
@@ -81,6 +87,46 @@ struct wl_shm_sigbus_data {
 	int fallback_mapping_used;
 };
 
+static void *
+shm_pool_grow_mapping(struct wl_shm_pool *pool)
+{
+	void *data;
+
+	assert(pool->new_size > pool->size && "Shrinking not allowed.");
+#ifdef HAVE_MREMAP
+	data = mremap(pool->data, pool->size, pool->new_size, MREMAP_MAYMOVE);
+#else
+	/* Try mapping a new block immediately after the current one */
+	data = mmap(pool->data + pool->size, pool->new_size - pool->size,
+		    pool->mmap_prot, pool->mmap_flags | MAP_FIXED,
+		    pool->mmap_fd, pool->size);
+	if (data != MAP_FAILED) {
+		/* Successfully created the new mapping, on most architectures
+		 * we can refer to it using the old pool->data pointer.
+		 * TODO: This will not work with CHERI since pool->data still
+		 *  has pool->size bounds, we always have to unmap there.
+		 */
+		return pool->data;
+	} else {
+		/* Adjacent address range already in use, map a new region and
+		 * copy the old data over. */
+		data = mmap(NULL, pool->new_size, pool->mmap_prot,
+			    pool->mmap_flags, pool->mmap_fd, 0);
+		if (data != MAP_FAILED) {
+			/* Copy the data over and unmap the old mapping. */
+			memmove(data, pool->data, pool->size);
+			if (munmap(pool->data, pool->size) != 0) {
+				wl_resource_post_error(pool->resource,
+						       WL_SHM_ERROR_INVALID_FD,
+						       "leaked old mapping");
+				/* retun MAP_FAILED; */
+			}
+		}
+	}
+#endif
+	return data;
+}
+
 static void
 shm_pool_finish_resize(struct wl_shm_pool *pool)
 {
@@ -89,7 +135,7 @@ shm_pool_finish_resize(struct wl_shm_pool *pool)
 	if (pool->size == pool->new_size)
 		return;
 
-	data = mremap(pool->data, pool->size, pool->new_size, MREMAP_MAYMOVE);
+	data = shm_pool_grow_mapping(pool);
 	if (data == MAP_FAILED) {
 		wl_resource_post_error(pool->resource,
 				       WL_SHM_ERROR_INVALID_FD,
@@ -116,6 +162,9 @@ shm_pool_unref(struct wl_shm_pool *pool, bool external)
 		return;
 
 	munmap(pool->data, pool->size);
+#ifndef HAVE_MREMAP
+	close(pool->mmap_fd);
+#endif
 	free(pool);
 }
 
@@ -264,6 +313,8 @@ shm_create_pool(struct wl_client *client, struct wl_resource *resource,
 {
 	struct wl_shm_pool *pool;
 	int seals;
+	int prot;
+	int flags;
 
 	if (size <= 0) {
 		wl_resource_post_error(resource,
@@ -291,16 +342,23 @@ shm_create_pool(struct wl_client *client, struct wl_resource *resource,
 	pool->external_refcount = 0;
 	pool->size = size;
 	pool->new_size = size;
-	pool->data = mmap(NULL, size,
-			  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	prot = PROT_READ | PROT_WRITE;
+	flags = MAP_SHARED;
+	pool->data = mmap(NULL, size, prot, flags, fd, 0);
 	if (pool->data == MAP_FAILED) {
-		wl_resource_post_error(resource,
-				       WL_SHM_ERROR_INVALID_FD,
+		wl_resource_post_error(resource, WL_SHM_ERROR_INVALID_FD,
 				       "failed mmap fd %d: %s", fd,
 				       strerror(errno));
 		goto err_free;
 	}
+#ifndef HAVE_MREMAP
+	/* We need to keep the fd, prot and flags to emulate mremap(). */
+	pool->mmap_prot = prot;
+	pool->mmap_prot = prot;
+	pool->mmap_fd = fd;
+#else
 	close(fd);
+#endif
 
 	pool->resource =
 		wl_resource_create(client, &wl_shm_pool_interface, 1, id);
