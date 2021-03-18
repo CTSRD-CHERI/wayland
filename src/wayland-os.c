@@ -27,6 +27,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <assert.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -78,8 +79,10 @@ wl_os_dupfd_cloexec(int fd, int minfd)
 	int newfd;
 
 	newfd = fcntl(fd, F_DUPFD_CLOEXEC, minfd);
-	if (newfd >= 0)
+	if (newfd >= 0) {
+		assert(fcntl(newfd, F_GETFD) & FD_CLOEXEC);
 		return newfd;
+	}
 	if (errno != EINVAL)
 		return -1;
 
