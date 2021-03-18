@@ -286,6 +286,10 @@ validate_recvmsg_h(struct marshal_data *data,
 	assert(fd1 >= 0);
 	assert(fd2 >= 0);
 	assert(fd3 >= 0);
+	/* The received file descriptors should all be CLOEXEC. */
+	assert((fcntl(fd1, F_GETFD) & FD_CLOEXEC) && "fd1 missing FD_CLOEXEC");
+	assert((fcntl(fd2, F_GETFD) & FD_CLOEXEC) && "fd2 missing FD_CLOEXEC");
+	assert((fcntl(fd3, F_GETFD) & FD_CLOEXEC) && "fd3 missing FD_CLOEXEC");
 
 	assert(fd1 != data->value.h[0]);
 	assert(fd2 != data->value.h[1]);
