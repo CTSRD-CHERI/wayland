@@ -1,3 +1,9 @@
+if host_machine.system().to_lower() == 'freebsd'
+	# On FreeBSD we use libprocstat to get the list of open file descriptors.
+	procstat_dep = cc.find_library('procstat', required: true)
+else
+	procstat_dep = dependency('', required:false)
+endif
 test_runner = static_library(
 	'test-runner',
 	sources: [
@@ -8,6 +14,7 @@ test_runner = static_library(
 	include_directories: [ root_inc, src_inc ],
 	dependencies: [
 		cc.find_library('dl', required: false),
+		procstat_dep,
 		dependency('threads'),
 		epoll_dep,
 		ffi_dep,

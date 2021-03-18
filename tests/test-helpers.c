@@ -40,18 +40,25 @@
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+#ifdef __FreeBSD__
+#include <sys/param.h>
+#include <sys/proc.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
+#include <sys/user.h>
+#include <libprocstat.h>
+#endif
 
 #include "test-runner.h"
 
 #if defined(__FreeBSD__)
-#include <sys/sysctl.h>
-
 /*
- * On FreeBSD, get file descriptor information using sysctl() since that does
- * not depend on a mounted fdescfs (which provides /dev/fd/N for N > 2).
+ * On FreeBSD, we print file descriptor details using libprocstat since that
+ * does not depend on fdescfs (which provides /dev/fd/N) being mounted.
  */
-int
-count_open_fds(void)
+static int
+count_open_fds_sysctl(void)
 {
 	int error;
 	int nfds;
@@ -63,7 +70,56 @@ count_open_fds(void)
 	assert(error == 0 && "sysctl KERN_PROC_NFDS failed.");
 	return nfds;
 }
+
+static int
+list_open_fds_libprocstat(void)
+{
+	unsigned int nprocs = 0;
+	unsigned int nfds = 0;
+	int flags;
+	struct procstat *prstat;
+	struct kinfo_proc *kp;
+	struct filestat *fst;
+	struct filestat_list *prfiles;
+
+	/* Note: we could also use the KERN_PROC_NFDS sysctl, but that */
+	prstat = procstat_open_sysctl();
+	assert(prstat != NULL && "Failed to init libprocstat");
+	kp = procstat_getprocs(prstat, KERN_PROC_PID, getpid(), &nprocs);
+	assert(kp != NULL);
+	assert(nprocs == 1);
+	prfiles = procstat_getfiles(prstat, kp, 0);
+	assert(prfiles != NULL);
+	STAILQ_FOREACH(fst, prfiles, next) {
+		if (fst->fs_fd == -1)
+			continue;
+		flags = fcntl(fst->fs_fd, F_GETFD);
+		fprintf(stderr, "fd[%d]=%d, type=%d, path=%s, flags=%#x%s\n",
+			nfds, fst->fs_fd, fst->fs_type, fst->fs_path, flags,
+			(flags & FD_CLOEXEC) ? " (includes FD_CLOEXEC)" : "");
+		nfds++;
+	}
+	procstat_freeprocs(prstat, kp);
+	procstat_freefiles(prstat, prfiles);
+	procstat_close(prstat);
+	return nfds;
+}
+
+static int
+count_open_fds_impl(bool print_descriptors)
+{
+	int count;
+
+	if (print_descriptors) {
+		count = list_open_fds_libprocstat();
+		assert(count == count_open_fds_sysctl());
+	} else {
+		count = count_open_fds_sysctl();
+	}
+	return count;
+}
 #else
+
 static int
 count_open_fds_impl(bool print_descriptors)
 {
