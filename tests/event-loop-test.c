@@ -168,10 +168,10 @@ TEST(event_loop_signal)
 					  signal_callback, &got_it);
 	assert(source);
 
-	wl_event_loop_dispatch(loop, 0);
+	assert(wl_event_loop_dispatch(loop, 0) == 0);
 	assert(!got_it);
-	kill(getpid(), SIGUSR1);
-	wl_event_loop_dispatch(loop, 0);
+	assert(kill(getpid(), SIGUSR1) == 0);
+	assert(wl_event_loop_dispatch(loop, 1) == 0);
 	assert(got_it == 1);
 
 	wl_event_source_remove(source);
@@ -199,8 +199,8 @@ TEST(event_loop_multiple_same_signals)
 	/* Try it more times */
 	for (i = 0; i < 5; ++i) {
 		calls_no = 0;
-		kill(getpid(), SIGUSR1);
-		assert(wl_event_loop_dispatch(loop, 0) == 0);
+		assert(kill(getpid(), SIGUSR1) == 0);
+		assert(wl_event_loop_dispatch(loop, 1) == 0);
 		assert(calls_no == 2);
 	}
 
@@ -208,8 +208,8 @@ TEST(event_loop_multiple_same_signals)
 
 	/* Try it again  with one source */
 	calls_no = 0;
-	kill(getpid(), SIGUSR1);
-	assert(wl_event_loop_dispatch(loop, 0) == 0);
+	assert(kill(getpid(), SIGUSR1) == 0);
+	assert(wl_event_loop_dispatch(loop, 1) == 0);
 	assert(calls_no == 1);
 
 	wl_event_source_remove(s2);
