@@ -327,7 +327,13 @@ do_os_wrappers_recvmsg_cloexec(int n)
 	struct marshal_data data;
 
 	data.nr_fds_begin = count_open_fds();
+#ifdef HAVE_BROKEN_MSG_CMSG_CLOEXEC
+	/* We call the fallback directly on FreeBSD versions with a broken
+	 * MSG_CMSG_CLOEXEC implementation. */
+	data.wrapped_calls = 0;
+#else
 	data.wrapped_calls = n;
+#endif
 
 	setup_marshal_data(&data);
 	data.nr_fds_conn = count_open_fds();
