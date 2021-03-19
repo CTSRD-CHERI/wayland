@@ -60,6 +60,9 @@ struct test {
 int
 count_open_fds(void);
 
+int
+list_open_fds(void);
+
 void
 exec_fd_leak_check(int nr_expected_fds); /* never returns */
 
