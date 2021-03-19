@@ -1,0 +1,25 @@
+name: Ubuntu
+
+on: [push]
+
+jobs:
+  testfreebsd:
+    runs-on: ubuntu-latest
+    name: Run tests on Ubuntu
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Dependencies
+        run: |
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libexpat1-dev libffi-dev libxml2-dev doxygen graphviz xmlto xsltproc docbook-xsl python3-pip python3-setuptools ninja-build
+          pip3 install meson==0.57.1
+      - name: Build
+        id: build
+        run: |
+          mkdir build
+          meson setup build -Ddocumentation=False
+          meson compile -C build
+          meson test -C build --print-errorlogs
+      - name: Run tests
+        id: test
+        run: meson test -C build --print-errorlogs
+
