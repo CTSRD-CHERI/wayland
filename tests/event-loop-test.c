@@ -317,13 +317,13 @@ TEST(event_loop_timer_updates)
 	 * wl_event_loop_dispatch() takes some time, it may happen
 	 * that only one timer expires until we call epoll_wait.
 	 * This naturally means that only one source is dispatched
-	 * and the test fails. To fix that, sleep 15 ms before
+	 * and the test fails. To fix that, sleep 150 ms before
 	 * calling wl_event_loop_dispatch(). That should be enough
 	 * for the second timer to expire.
 	 *
 	 * https://bugs.freedesktop.org/show_bug.cgi?id=80594
 	 */
-	usleep(MSEC_TO_USEC(15));
+	usleep(MSEC_TO_USEC(150));
 
 	gettimeofday(&start_time, NULL);
 	wl_event_loop_dispatch(loop, 20);
@@ -394,7 +394,7 @@ TEST(event_loop_timer_order)
 	}
 
 	/* Wait until all timers are due */
-	usleep(MSEC_TO_USEC(21));
+	usleep(MSEC_TO_USEC(200));
 	wl_event_loop_dispatch(loop, 0);
 	assert(last == 19);
 
@@ -461,7 +461,7 @@ TEST(event_loop_timer_cancellation)
 		assert(wl_event_source_timer_update(context.timers[i], 1) == 0);
 	}
 
-	usleep(MSEC_TO_USEC(2));
+	usleep(MSEC_TO_USEC(100));
 	assert(wl_event_loop_dispatch(loop, 0) == 0);
 
 	/* Tracking which timer was first makes this test independent of the
