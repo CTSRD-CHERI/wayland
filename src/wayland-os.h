@@ -26,6 +26,19 @@
 #ifndef WAYLAND_OS_H
 #define WAYLAND_OS_H
 
+#ifdef __FreeBSD__
+#include <sys/param.h> /* To get __FreeBSD_version. */
+#if __FreeBSD_version < 1300502 || \
+    (__FreeBSD_version >= 1400000 && __FreeBSD_version < 1400006)
+/*
+ * FreeBSD had a broken implementation of MSG_CMSG_CLOEXEC between 2015 and
+ * 2021. Check if we are compiling against a version that includes the fix
+ * (https://cgit.freebsd.org/src/commit/?id=6ceacebdf52211).
+ */
+#define HAVE_BROKEN_MSG_CMSG_CLOEXEC
+#endif
+#endif
+
 int
 wl_os_socket_cloexec(int domain, int type, int protocol);
 

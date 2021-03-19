@@ -121,6 +121,9 @@ recvmsg_cloexec_fallback(int sockfd, struct msghdr *msg, int flags)
 ssize_t
 wl_os_recvmsg_cloexec(int sockfd, struct msghdr *msg, int flags)
 {
+#ifdef HAVE_BROKEN_MSG_CMSG_CLOEXEC
+#pragma message("Using fallback directly since MSG_CMSG_CLOEXEC is broken.")
+#else
 	ssize_t len;
 
 	len = recvmsg(sockfd, msg, flags | MSG_CMSG_CLOEXEC);
@@ -128,7 +131,7 @@ wl_os_recvmsg_cloexec(int sockfd, struct msghdr *msg, int flags)
 		return len;
 	if (errno != EINVAL)
 		return -1;
-
+#endif
 	return recvmsg_cloexec_fallback(sockfd, msg, flags);
 }
 
