@@ -26,8 +26,10 @@
 #include "config.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -62,12 +64,15 @@ count_open_fds(void)
 	return nfds;
 }
 #else
-int
-count_open_fds(void)
+static int
+count_open_fds_impl(bool print_descriptors)
 {
+	int count = 0;
 	DIR *dir;
 	struct dirent *ent;
-	int count = 0;
+	int opendirfd;
+	int curfd;
+	bool found_opendirfd = false;
 
 	/*
 	 * Using /dev/fd instead of /proc/self/fd should allow this code to
@@ -75,21 +80,63 @@ count_open_fds(void)
 	 */
 	dir = opendir("/dev/fd");
 	assert(dir && "opening /dev/fd failed.");
+	opendirfd = dirfd(dir);
+	assert(opendirfd >= 0);
 
 	errno = 0;
 	while ((ent = readdir(dir))) {
 		const char *s = ent->d_name;
 		if (s[0] == '.' && (s[1] == 0 || (s[1] == '.' && s[2] == 0)))
 			continue;
+		errno = 0;
+		curfd = strtol(ent->d_name, NULL, 10);
+		if (errno != 0) {
+			fprintf(stderr, "Unexpected file name '%s'\n",
+				ent->d_name);
+			abort();
+		}
+		if (curfd == opendirfd) {
+			/* Don't count the file descriptor we just opened. */
+			found_opendirfd = true;
+			continue;
+		}
+		if (print_descriptors) {
+			int flags;
+			char path[PATH_MAX];
+			ssize_t namelen;
+
+			flags = fcntl(curfd, F_GETFD);
+			path[0] = '\0';
+			namelen = readlinkat(opendirfd, ent->d_name, path, sizeof(path));
+			assert(namelen >= 0 && "readlinkat failed");
+			path[namelen] = '\0';
+			fprintf(stderr, "fd[%d]=%d, path=%s, flags=%#x%s\n",
+				count, curfd, path, flags,
+				(flags & FD_CLOEXEC) ? " (includes FD_CLOEXEC)"
+						     : "");
+		}
 		count++;
 	}
 	assert(errno == 0 && "reading /dev/fd failed.");
+	assert(found_opendirfd && "Did not see fd from opendir().");
 
 	closedir(dir);
 
 	return count;
 }
 #endif
+
+int
+list_open_fds(void)
+{
+	return count_open_fds_impl(true);
+}
+
+int
+count_open_fds(void)
+{
+	return count_open_fds_impl(false);
+}
 
 void
 exec_fd_leak_check(int nr_expected_fds)
@@ -99,6 +146,12 @@ exec_fd_leak_check(int nr_expected_fds)
 	const char *test_build_dir = getenv("TEST_BUILD_DIR");
 	char exe_path[256] = { 0 };
 
+	if (getenv("TEST_DEBUG_FD_LEAK_CHECK")) {
+		fprintf(stderr, "Calling %s(%d)\n", __func__, nr_expected_fds);
+		fprintf(stderr, "FDs before exec\n");
+		list_open_fds();
+	}
+
 	if (test_build_dir == NULL || test_build_dir[0] == 0) {
 	        test_build_dir = ".";
 	}
@@ -107,7 +160,8 @@ exec_fd_leak_check(int nr_expected_fds)
 
 	snprintf(number, sizeof number - 1, "%d", nr_expected_fds);
 	execl(exe_path, exe, number, (char *)NULL);
-	assert(0 && "execing fd leak checker failed");
+	fprintf(stderr, "Failed to execute '%s %s'\n", exe_path, number);
+	abort();
 }
 
 #define USEC_TO_NSEC(n) (1000 * (n))
