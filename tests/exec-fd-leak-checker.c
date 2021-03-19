@@ -56,6 +56,7 @@ parse_count(const char *str, int *value)
 int main(int argc, char *argv[])
 {
 	int expected;
+	int nfds;
 
 	if (argc != 2)
 		goto help_out;
@@ -63,10 +64,20 @@ int main(int argc, char *argv[])
 	if (parse_count(argv[1], &expected) < 0)
 		goto help_out;
 
-	if (count_open_fds() == expected)
+	nfds = count_open_fds();
+	if (nfds == expected) {
+		if (getenv("TEST_DEBUG_FD_LEAK_CHECK")) {
+			fprintf(stderr, "Got %d file descriptor as expected\n",
+				nfds);
+			list_open_fds();
+		}
 		return EXIT_SUCCESS;
-	else
+	} else {
+		fprintf(stderr, "Got %d file descriptors but expected %d.\n"
+			"Currently open descriptors:\n\n", nfds, expected);
+		list_open_fds();
 		return EXIT_FAILURE;
+	}
 
 help_out:
 	fprintf(stderr, "Usage: %s N\n"
