@@ -82,7 +82,6 @@ list_open_fds_libprocstat(void)
 	struct filestat *fst;
 	struct filestat_list *prfiles;
 
-	/* Note: we could also use the KERN_PROC_NFDS sysctl, but that */
 	prstat = procstat_open_sysctl();
 	assert(prstat != NULL && "Failed to init libprocstat");
 	kp = procstat_getprocs(prstat, KERN_PROC_PID, getpid(), &nprocs);
