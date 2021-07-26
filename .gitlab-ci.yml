@@ -78,6 +78,8 @@ build-native:
     paths:
     - build-meson/meson-logs
     - prefix-*
+    reports:
+      junit: build-meson/meson-logs/testlog.junit.xml
 
 .freebsd.13:
   variables:
@@ -110,9 +112,8 @@ freebsd:13.0@qemu-check@x86_64:
     # succeeds
     - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson build/ -Ddocumentation=false && ninja -C build/ -j${FDO_CI_CONCURRENT:-4}"
     - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson test -C build/" && touch .success
-    # copy any test results from the VM to our container so we can
-    # save them as artifacts
-    - scp -r vm:$CI_PROJECT_NAME/test-results.xml .
+    # copy any test results from the VM to our container so we can save them as artifacts
+    - scp -r vm:$CI_PROJECT_NAME/build/meson-logs .
     # shut down the VM
     - /app/vmctl stop
     # our CI script exit code should match the test command exit status
@@ -121,5 +122,6 @@ freebsd:13.0@qemu-check@x86_64:
     name: wayland-meson-$CI_COMMIT_SHA-$CI_JOB_ID
     when: always
     paths:
-      - build-meson/meson-logs
-      - prefix-*
+      - meson-logs
+    reports:
+      junit: meson-logs/testlog.junit.xml
