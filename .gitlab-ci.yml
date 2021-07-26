@@ -100,6 +100,7 @@ freebsd:13.0@qemu-check@x86_64:
   extends:
     - .fdo.distribution-image@freebsd
     - .freebsd.13
+  allow_failure: true
   stage: build
   script:
     # start the VM. This also sets up ssh/scp to connect to "vm"
