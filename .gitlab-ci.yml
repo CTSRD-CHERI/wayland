@@ -79,19 +79,25 @@ build-native:
     - build-meson/meson-logs
     - prefix-*
 
-freebsd:13.0@qemu-build@x86_64:
-  extends:
-    - .fdo.qemu-build@freebsd@x86_64
-  stage: prep
+.freebsd.13:
   variables:
-    FDO_CBUILD: https://gitlab.freedesktop.org/api/v4/projects/5764/packages/generic/cbuild/sha256-3606152dfd34af076f6c09d24bb8cdf128fce83d07d53d91745c101ec06c7209/cbuild
     FDO_DISTRIBUTION_PACKAGES: 'libxslt meson ninja pkgconf expat libffi libepoll-shim libxml2'
     FDO_DISTRIBUTION_VERSION: '13.0'
     FDO_DISTRIBUTION_TAG: '2021-07-26.1'
+    FDO_CBUILD: https://gitlab.freedesktop.org/api/v4/projects/5764/packages/generic/cbuild/sha256-3606152dfd34af076f6c09d24bb8cdf128fce83d07d53d91745c101ec06c7209/cbuild
+
+
+freebsd:13.0@qemu-build@x86_64:
+  extends:
+    - .fdo.qemu-build@freebsd@x86_64
+    - .freebsd.13
+  stage: prep
+
 
 freebsd:13.0@qemu-check@x86_64:
   extends:
     - .fdo.distribution-image@freebsd
+    - .freebsd.13
   stage: build
   script:
     # start the VM. This also sets up ssh/scp to connect to "vm"
