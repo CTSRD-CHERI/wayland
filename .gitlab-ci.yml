@@ -1,15 +1,13 @@
-.templates_sha: &template_sha 290b79e0e78eab67a83766f4e9691be554fc4afd # see https://docs.gitlab.com/ee/ci/yaml/#includefile
+.templates_sha: &template_sha 62b11fa3f746b38ae413fc936cc6ae96960dd448 # see https://docs.gitlab.com/ee/ci/yaml/#includefile
 
 
 include:
-  # Debian container builder template
   - project: 'freedesktop/ci-templates'
     ref: *template_sha
-    file: '/templates/debian.yml'
-  # ci-fairy template
-  - project: 'freedesktop/ci-templates'
-    ref: *template_sha
-    file: '/templates/ci-fairy.yml'
+    file:
+      - '/templates/freebsd.yml'
+      - '/templates/debian.yml'
+      - '/templates/ci-fairy.yml'
 
 
 stages:
@@ -25,7 +23,7 @@ variables:
   # changing these will force rebuilding the associated image
   # Note: these tags have no meaning and are not tied to a particular
   # wayland version
-  DEBIAN_TAG: '2020-12-14.0'
+  DEBIAN_TAG: '2021-07-26.0'
   FDO_UPSTREAM_REPO: wayland/wayland
 
 
@@ -57,6 +55,7 @@ debian:buster@container-prep:
   stage: prep
   variables:
     GIT_STRATEGY: none
+    FDO_CBUILD: https://gitlab.freedesktop.org/api/v4/projects/5764/packages/generic/cbuild/sha256-3606152dfd34af076f6c09d24bb8cdf128fce83d07d53d91745c101ec06c7209/cbuild
 
 
 build-native:
@@ -79,3 +78,42 @@ build-native:
     paths:
     - build-meson/meson-logs
     - prefix-*
+
+freebsd:13.0@qemu-build@x86_64:
+  extends:
+    - .fdo.qemu-build@freebsd@x86_64
+  stage: prep
+  variables:
+    FDO_CBUILD: https://gitlab.freedesktop.org/api/v4/projects/5764/packages/generic/cbuild/sha256-3606152dfd34af076f6c09d24bb8cdf128fce83d07d53d91745c101ec06c7209/cbuild
+    FDO_DISTRIBUTION_PACKAGES: 'libxslt meson ninja pkgconf expat libffi libepoll-shim libxml2'
+    FDO_DISTRIBUTION_VERSION: '13.0'
+    FDO_DISTRIBUTION_TAG: '2021-07-26.1'
+
+freebsd:13.0@qemu-check@x86_64:
+  extends:
+    - .fdo.distribution-image@freebsd
+  stage: build
+  script:
+    # start the VM. This also sets up ssh/scp to connect to "vm"
+    # correctly.
+    - /app/vmctl start
+    # copy our workspace to the VM
+    # The quotes are required to stop the ':' from parsing as yaml
+    - scp -r $PWD "vm:"
+    # run test-command on the VM and create the .success file if it
+    # succeeds
+    - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson build/ -Ddocumentation=false && ninja -C build/ -j${FDO_CI_CONCURRENT:-4}"
+    - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson test -C build/" && touch .success
+    # copy any test results from the VM to our container so we can
+    # save them as artifacts
+    - scp -r vm:$CI_PROJECT_NAME/test-results.xml .
+    # shut down the VM
+    - /app/vmctl stop
+    # our CI script exit code should match the test command exit status
+    - test -e .success || exit 1
+  artifacts:
+    name: wayland-meson-$CI_COMMIT_SHA-$CI_JOB_ID
+    when: always
+    paths:
+      - build-meson/meson-logs
+      - prefix-*
