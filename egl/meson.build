@@ -11,16 +11,21 @@ wayland_egl = library(
 
 executable('wayland-egl-abi-check', 'wayland-egl-abi-check.c')
 
-nm_path = find_program('nm').path()
+# Don't run the wayland-egl-symbols-check test when cross-compiling since
+# find_program will fall back to finding the host nm and trying to execute
+# that in the cross-compiled environment will fail.
+if not meson.is_cross_build()
+	nm_path = find_program('nm').path()
 
-test(
-	'wayland-egl symbols check',
-	find_program('wayland-egl-symbols-check'),
-	env: [
-		'WAYLAND_EGL_LIB=@0@'.format(wayland_egl.full_path()),
-		'NM=@0@'.format(nm_path)
-	]
-)
+	test(
+		'wayland-egl symbols check',
+		find_program('wayland-egl-symbols-check'),
+		env: [
+			'WAYLAND_EGL_LIB=@0@'.format(wayland_egl.full_path()),
+			'NM=@0@'.format(nm_path)
+		]
+	)
+endif
 
 install_headers([
 	'wayland-egl.h',
