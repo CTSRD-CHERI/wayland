@@ -112,7 +112,7 @@ freebsd:13.0@qemu-check@x86_64:
     # run test-command on the VM and create the .success file if it
     # succeeds
     - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson build/ -Ddocumentation=false && ninja -C build/ -j${FDO_CI_CONCURRENT:-4}"
-    - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson test -C build/" && touch .success
+    - /app/vmctl exec "cd $CI_PROJECT_NAME ; meson test --print-errorlogs -C build/" && touch .success
     # copy any test results from the VM to our container so we can save them as artifacts
     - scp -r vm:$CI_PROJECT_NAME/build/meson-logs .
     # shut down the VM
